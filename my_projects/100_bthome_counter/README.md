@@ -136,13 +136,115 @@ asyncio.run(scan_bthome())
 ## Serial Output Example
 
 ```
-[00:00:00.234,000] <inf> bthome_counter: BTHome Counter Example for nRF52840-DK
-[00:00:00.234,000] <inf> bthome_counter: Board: nrf52840dk_nrf52840
-[00:00:01.234,000] <inf> bthome_counter: Bluetooth initialized
-[00:00:01.234,000] <inf> bthome_counter: BTHome Counter starting with device ID 0x1234
-[00:00:03.234,000] <inf> bthome_counter: BTHome advertisement sent: Counter = 1
-[00:00:08.234,000] <inf> bthome_counter: BTHome advertisement sent: Counter = 2
-[00:00:13.234,000] <inf> bthome_counter: BTHome advertisement sent: Counter = 3
+# BTHome Counter Example
+
+Dieses Beispiel implementiert einen BTHome v2 kompatiblen Counter, der über Bluetooth LE Advertising Zählerwerte überträgt.
+
+## Übersicht
+
+Das Projekt sendet BTHome v2 konforme Advertisement-Pakete mit einem sich kontinuierlich erhöhenden Counter-Wert. Die Implementierung folgt exakt der [BTHome v2 Spezifikation](https://bthome.io/format/).
+
+## BTHome v2 Spezifikation Compliance
+
+### Advertisement-Struktur
+```
+Flags: 020106
+- 0x02 = Länge (2 bytes)
+- 0x01 = Flags AD Type
+- 0x06 = LE General Discoverable + BR/EDR Not Supported
+
+Service Data: 0616D2FC4003D0001
+- 0x06 = Länge (6 bytes)
+- 0x16 = Service Data 16-bit UUID AD Type
+- 0xD2FC = BTHome Service UUID (little endian, reversed: 0xFCD2)
+- 0x40 = Device Info (BTHome v2, no encryption, regular updates)
+- 0x3D = Object ID (16-bit counter)
+- 0x0001 = Counter value (little endian)
+
+Complete Name: 0E094254486F6D6520436F756E746572
+- 0x0E = Länge (14 bytes)
+- 0x09 = Complete Local Name AD Type
+- "BTHome Counter" in UTF-8
+```
+
+### Device Info Byte (0x40)
+```
+Binär: 01000000
+- Bit 0: 0 = Keine Verschlüsselung
+- Bit 1: 0 = Reserviert
+- Bit 2: 0 = Regelmäßige Updates (nicht trigger-basiert)
+- Bit 3-4: 00 = Reserviert
+- Bit 5-7: 010 = BTHome Version 2
+```
+
+### Counter Object (0x3D)
+- **Object ID**: 0x3D (16-bit unsigned counter)
+- **Datentyp**: uint16 (2 bytes)
+- **Faktor**: 1
+- **Format**: Little Endian
+- **Bereich**: 0-65535
+
+## Hardware
+
+- **Board**: nRF52840-DK
+- **Bluetooth**: BLE 5.0
+- **Stromverbrauch**: Optimiert für Advertisement-Only Betrieb
+
+## Features
+
+- ✅ BTHome v2 vollständig kompatibel
+- ✅ Flags AD Element (erforderlich für Bluez/Home Assistant)
+- ✅ Korrekte device_info Byte (0x40)
+- ✅ 16-bit Counter mit korrekter Object ID (0x3D)
+- ✅ Stabile MAC-Adresse (kein "neues Device" bei jedem Start)
+- ✅ Advertisement alle 5 Sekunden
+- ✅ Umfassendes Debug-Logging
+
+## Erwartete Ausgabe
+
+```
+[00:00:02.123,000] <inf> bthome_counter: BTHome Counter Example for nRF52840-DK
+[00:00:02.123,000] <inf> bthome_counter: Bluetooth initialized
+[00:00:02.123,000] <inf> bthome_counter: BTHome Counter starting with device ID 0x1234
+[00:00:02.123,000] <inf> bthome_counter: BTHome device info: 0x40 (v2, no encryption, regular updates)
+[00:00:04.123,000] <inf> bthome_counter: BTHome advertisement sent: Counter = 1
+[00:00:09.123,000] <inf> bthome_counter: BTHome advertisement sent: Counter = 2
+```
+
+## Kompatibilität
+
+### Home Assistant
+- Erfordert die [BTHome Integration](https://www.home-assistant.io/integrations/bthome/)
+- Device erscheint automatisch als `sensor.bthome_counter_count`
+- Wert aktualisiert sich alle 5 Sekunden
+
+### nRF Connect (Nordic)
+- Device erscheint als "BTHome Counter"
+- Service Data zeigt BTHome UUID (0xFCD2)
+- Advertisement-Daten sind im Raw-Format sichtbar
+
+### Andere BTHome Receiver
+- Jeder BTHome v2 kompatible Receiver sollte den Counter automatisch erkennen
+- Object ID 0x3D wird als "count" interpretiert
+
+## Debugging
+
+Für erweiterte BTHome-Paket-Analyse:
+1. Aktiviere Debug-Level Logging: `CONFIG_LOG_DEFAULT_LEVEL=4`
+2. Verwende `LOG_HEXDUMP_DBG` Output für Rohdaten-Analyse
+3. Vergleiche mit BTHome v2 Beispielen auf [GitHub](https://github.com/Bluetooth-Devices/bthome-ble)
+
+## Bekannte Issues
+
+- ~~Advertisement erscheint als neues Device~~ ✅ **BEHOBEN**: Stabile MAC-Adresse konfiguriert
+- ~~Fehlende Flags verhindern Bluez-Parsing~~ ✅ **BEHOBEN**: Flags AD Element hinzugefügt  
+- ~~Falsche device_info Byte~~ ✅ **BEHOBEN**: Korrekte BTHome v2 Signatur (0x40)
+
+## Weiterführende Links
+
+- [BTHome v2 Format Spezifikation](https://bthome.io/format/)
+- [BTHome GitHub Repository](https://github.com/Bluetooth-Devices/bthome-ble)
+- [Home Assistant BTHome Integration](https://www.home-assistant.io/integrations/bthome/)
 ```
 
 ## Configuration
