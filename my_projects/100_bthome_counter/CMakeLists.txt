@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 cmake_minimum_required(VERSION 3.20.0)
+
+# Add BTHome module to the module path before finding Zephyr
+list(APPEND ZEPHYR_EXTRA_MODULES
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/bthome
+)
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(bthome_counter)
 
-# Add BTHome library
-add_subdirectory(../../lib/bthome bthome)
-
-# Link BTHome library and add include directory
-target_link_libraries(app PRIVATE bthome)
-target_include_directories(app PRIVATE ../../lib/bthome/include)
+# BTHome module is now automatically loaded via CONFIG_BTHOME=y
 
 target_sources(app PRIVATE src/main.c)

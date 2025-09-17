@@ -39,6 +39,13 @@ extern "C" {
 #define BTHOME_MAX_PAYLOAD_SIZE     23      /**< Maximum payload size without encryption */
 #define BTHOME_MAX_PAYLOAD_ENC      15      /**< Maximum payload size with encryption */
 
+/* Use Kconfig for max measurements if available, otherwise default */
+#ifdef CONFIG_BTHOME_MAX_MEASUREMENTS
+#define BTHOME_MAX_MEASUREMENTS     CONFIG_BTHOME_MAX_MEASUREMENTS
+#else
+#define BTHOME_MAX_MEASUREMENTS     10      /**< Default max measurements per advertisement */
+#endif
+
 /* BTHome v2 Device Info Flags */
 #define BTHOME_NO_ENCRYPT           0x40    /**< BTHome v2, no encryption */
 #define BTHOME_NO_ENCRYPT_TRIGGER   0x44    /**< BTHome v2, no encryption, trigger-based */

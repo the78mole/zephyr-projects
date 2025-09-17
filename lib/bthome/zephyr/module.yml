@@ -1,3 +1,5 @@
+# BTHome v2 Protocol Library for Zephyr
+name: bthome
 build:
   cmake: .
   kconfig: Kconfig

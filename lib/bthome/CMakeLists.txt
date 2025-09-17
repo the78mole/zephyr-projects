@@ -1,19 +1,23 @@
 # Copyright (c) 2025 BTHome v2 for Zephyr
 # SPDX-License-Identifier: Apache-2.0
 
-# Check if we are building within Zephyr context
+# This is a Zephyr module CMakeLists.txt file
+# It is included when BTHOME is enabled in Kconfig
+
 if(CONFIG_BTHOME)
-    # Zephyr module mode
+    # Create BTHome library as a Zephyr library
     zephyr_library()
-    zephyr_library_sources(src/bthome.c)
-    zephyr_library_include_directories(include)
-else()
-    # Standalone library mode
-    add_library(bthome src/bthome.c)
-    target_include_directories(bthome PUBLIC include)
     
-    # Make sure we have Zephyr context
-    if(TARGET zephyr_interface)
-        target_link_libraries(bthome PUBLIC zephyr_interface)
-    endif()
+    # Add source files
+    zephyr_library_sources(src/bthome.c)
+    
+    # Add include directories
+    zephyr_library_include_directories(include)
+    
+    # Add module-specific includes
+    zephyr_include_directories(include)
+    
+    # Add compile definitions based on Kconfig
+    zephyr_compile_definitions_ifdef(CONFIG_BTHOME_ENCRYPTION BTHOME_ENCRYPTION_ENABLED)
+    zephyr_compile_definitions_ifdef(CONFIG_BTHOME_AUTO_MAC BTHOME_AUTO_MAC_ENABLED)
 endif()

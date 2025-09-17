@@ -20,7 +20,7 @@ static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 static struct bthome_device bthome_dev;
 
 /* Counter state */
-static uint16_t counter_value = 300;
+static uint16_t counter_value = 0;
 
 /* Bluetooth ready callback */
 static void bt_ready(int err)
