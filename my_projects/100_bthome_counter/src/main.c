@@ -1,201 +1,93 @@
 /*
- * Copyright (c) 2025 BTHome Counter Example
+ * Copyright (c) 2025 BTHome Counter Example with Library
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <zephyr/kernel.h>
+#include <bthome.h>
 #include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/gap.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(bthome_counter, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(bthome_counter, LOG_LEVEL_INF);
 
-/* LED definitions for nRF52840-DK */
-#define LED1_NODE DT_ALIAS(led1)
+/* LED for visual feedback */
+#define LED1_NODE DT_ALIAS(led0)
 static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 
-/* BTHome device information */
-#define BTHOME_DEVICE_ID        0x1234  /* Unique device ID */
-#define BTHOME_DEVICE_INFO      0x40    /* BTHome v2, no encryption, regular updates */
-
-/* BTHome object IDs - see BTHome specification */
-#define BTHOME_COUNT_8          0x09    /* Count (8-bit) */
-#define BTHOME_COUNT_16         0x3D    /* Count (16-bit) */
+/* BTHome device instance */
+static struct bthome_device bthome_dev;
 
 /* Counter state */
-static uint16_t counter_value = 0;
-
-/* Generate a fixed MAC address based on nRF52840 FICR data */
-static void get_fixed_mac_address(bt_addr_le_t *addr)
-{
-    /* Read FICR DEVICEADDR registers - CORRECT addresses! */
-    uint32_t deviceaddr_low = *((volatile uint32_t *)0x100000A4);   /* FICR.DEVICEADDR[0] */
-    uint32_t deviceaddr_high = *((volatile uint32_t *)0x100000A8);  /* FICR.DEVICEADDR[1] */
-    
-    LOG_INF("FICR.DEVICEADDR: 0x%08X%08X", deviceaddr_high, deviceaddr_low);
-    
-    /* Create a deterministic MAC address from the factory data */
-    addr->type = BT_ADDR_LE_RANDOM;
-    
-    /* Use the factory device address to create a stable BLE MAC */
-    addr->a.val[0] = (deviceaddr_low >> 0) & 0xFF;
-    addr->a.val[1] = (deviceaddr_low >> 8) & 0xFF;
-    addr->a.val[2] = (deviceaddr_low >> 16) & 0xFF;
-    addr->a.val[3] = (deviceaddr_low >> 24) & 0xFF;
-    addr->a.val[4] = (deviceaddr_high >> 0) & 0xFF;
-    addr->a.val[5] = ((deviceaddr_high >> 8) & 0x3F) | 0xC0;  /* Static random address format */
-    
-    LOG_INF("Generated fixed MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
-            addr->a.val[5], addr->a.val[4], addr->a.val[3], 
-            addr->a.val[2], addr->a.val[1], addr->a.val[0]);
-}
-
-/* BTHome service data structure (without AD header) */
-struct bthome_service_data {
-    uint16_t uuid;         /* BTHome Service UUID (0xFCD2) */
-    uint8_t device_info;   /* Device info byte */
-    uint8_t object_id;     /* Object ID */
-    uint16_t value;        /* Counter value (little endian) */
-} __packed;
-
-/* Build BTHome advertisement packet */
-static void build_bthome_adv_data(struct bt_data *ad_data, struct bthome_service_data *bthome)
-{
-    /* Flags - required for BTHome v2 compatibility */
-    static uint8_t flags = BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR;
-    
-    /* BTHome service data */
-    bthome->uuid = 0xFCD2;  /* BTHome service UUID (little endian) */
-    bthome->device_info = BTHOME_DEVICE_INFO;  /* BTHome v2, no encryption, regular updates */
-    bthome->object_id = BTHOME_COUNT_16;   /* 16-bit counter */
-    bthome->value = counter_value;         /* Counter value (little endian) */
-
-    /* Setup advertisement data array */
-    /* AD Element 1: Flags (required by BTHome v2) */
-    ad_data[0].type = BT_DATA_FLAGS;
-    ad_data[0].data_len = 1;
-    ad_data[0].data = &flags;
-
-    /* AD Element 2: Service Data (16-bit UUID) - BTHome data */
-    ad_data[1].type = BT_DATA_SVC_DATA16;
-    ad_data[1].data_len = sizeof(struct bthome_service_data);
-    ad_data[1].data = (uint8_t *)bthome;
-
-    /* AD Element 3: Complete Device Name */
-    ad_data[2].type = BT_DATA_NAME_COMPLETE;
-    ad_data[2].data = "BTHome Counter";
-    ad_data[2].data_len = strlen("BTHome Counter");
-}
+static uint16_t counter_value = 300;
 
 /* Bluetooth ready callback */
 static void bt_ready(int err)
 {
-    bt_addr_le_t current_addr;
-    size_t count = 1;
-    
     if (err) {
         LOG_ERR("Bluetooth init failed (err %d)", err);
         return;
     }
 
     LOG_INF("Bluetooth initialized");
-    
-    /* Check what identity we actually have */
-    bt_id_get(&current_addr, &count);
-    
-    if (count > 0) {
-        LOG_INF("Active MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
-                current_addr.a.val[5], current_addr.a.val[4], current_addr.a.val[3], 
-                current_addr.a.val[2], current_addr.a.val[1], current_addr.a.val[0]);
-    }
-    
-    LOG_INF("BTHome Counter starting with device ID 0x%04X", BTHOME_DEVICE_ID);
-    LOG_INF("BTHome device info: 0x%02X (v2, no encryption, regular updates)", BTHOME_DEVICE_INFO);
 }
 
-/* Advertisement work handler */
-static void advertise_work_handler(struct k_work *work);
-static K_WORK_DELAYABLE_DEFINE(advertise_work, advertise_work_handler);
+/* Work handler for periodic counter updates */
+static void counter_work_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(counter_work, counter_work_handler);
 
-/* Global advertisement data - persistent across updates */
-static struct bt_data ad_data[3];  /* Flags + Service Data + Name */
-static struct bthome_service_data bthome;
-static bool advertising_started = false;
-
-static void advertise_work_handler(struct k_work *work)
+static void counter_work_handler(struct k_work *work)
 {
     int err;
 
-    /* LED an - Advertisement beginnt */
+    /* LED on - advertisement cycle starts */
     gpio_pin_set_dt(&led1, 1);
+
+    /* Reset measurements for new packet */
+    bthome_reset_measurements(&bthome_dev);
 
     /* Increment counter */
     counter_value++;
-    
-    /* Update BTHome advertisement data */
-    build_bthome_adv_data(ad_data, &bthome);
 
-    if (!advertising_started) {
-        /* Start advertising for the first time with USE_IDENTITY flag */
-        err = bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_USE_IDENTITY,
-                                              BT_GAP_ADV_SLOW_INT_MIN,
-                                              BT_GAP_ADV_SLOW_INT_MAX,
-                                              NULL),
-                              ad_data, ARRAY_SIZE(ad_data), NULL, 0);
-        if (err) {
-            LOG_ERR("Failed to start advertising (err %d)", err);
-        } else {
-            LOG_INF("BTHome advertising started successfully");
-            advertising_started = true;
-        }
-    } else {
-        /* Update existing advertisement data */
-        err = bt_le_adv_update_data(ad_data, ARRAY_SIZE(ad_data), NULL, 0);
-        if (err) {
-            LOG_ERR("Failed to update advertising data (err %d)", err);
-            /* Try to restart advertising on update failure */
-            bt_le_adv_stop();
-            k_sleep(K_MSEC(50));
-            err = bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_USE_IDENTITY,
-                                                  BT_GAP_ADV_SLOW_INT_MIN,
-                                                  BT_GAP_ADV_SLOW_INT_MAX,
-                                                  NULL),
-                                  ad_data, ARRAY_SIZE(ad_data), NULL, 0);
-            if (err) {
-                LOG_ERR("Failed to restart advertising (err %d)", err);
-                advertising_started = false;
-            }
-        }
+    /* Add counter measurement (16-bit) */
+    err = bthome_add_sensor(&bthome_dev, BTHOME_ID_COUNT2, counter_value);
+    if (err) {
+        LOG_ERR("Failed to add counter: %d", err);
+        goto cleanup;
     }
 
-    if (advertising_started) {
-        LOG_INF("BTHome advertisement updated: Counter = %u", counter_value);
-        
-        /* Log the raw BTHome service data for debugging */
-        LOG_HEXDUMP_DBG(&bthome, sizeof(bthome), "BTHome service data:");
+    /* Send advertisement */
+    err = bthome_advertise(&bthome_dev, 1500);  /* Advertise for 1.5 seconds */
+    if (err) {
+        LOG_ERR("Failed to start advertising: %d", err);
+        goto cleanup;
     }
 
-    /* LED aus nach kurzer Zeit - Advertisement beendet */
+    LOG_INF("BTHome advertisement sent: Counter = %u", counter_value);
+
+cleanup:
+    /* LED off after short delay */
     k_sleep(K_MSEC(100));
     gpio_pin_set_dt(&led1, 0);
 
     /* Schedule next advertisement in 5 seconds */
-    k_work_schedule(&advertise_work, K_SECONDS(5));
+    k_work_schedule(&counter_work, K_SECONDS(5));
 }
 
 int main(void)
 {
     int err;
-    bt_addr_le_t fixed_addr;
+    struct bthome_config config = {
+        .device_name = "BTHome Counter",
+        .encryption = false,
+        .trigger_based = false,
+    };
 
-    LOG_INF("BTHome Counter Example for nRF52840-DK");
+    LOG_INF("BTHome Counter Example for nRF52840-DK (with Library)");
     LOG_INF("Board: %s", CONFIG_BOARD_TARGET);
 
-    /* Initialize LED1 for visual feedback */
+    /* Initialize LED */
     if (!gpio_is_ready_dt(&led1)) {
         LOG_ERR("LED1 device not ready");
         return -1;
@@ -203,25 +95,26 @@ int main(void)
     
     err = gpio_pin_configure_dt(&led1, GPIO_OUTPUT_INACTIVE);
     if (err < 0) {
-        LOG_ERR("Failed to configure LED1 pin: %d", err);
+        LOG_ERR("Failed to configure LED1: %d", err);
         return -1;
     }
-    
+
     LOG_INF("LED1 initialized successfully");
 
-    /* WICHTIG: MAC-Adresse VOR bt_enable() setzen! */
-    get_fixed_mac_address(&fixed_addr);
-    
-    /* Create identity with fixed MAC before enabling Bluetooth */
-    err = bt_id_create(&fixed_addr, NULL);
-    if (err < 0) {
-        LOG_ERR("Failed to create fixed identity: %d", err);
-        /* Continue anyway - system will use default */
-    } else {
-        LOG_INF("Fixed identity created successfully with ID: %d", err);
+    /* Set fixed MAC address manually */
+    err = bthome_set_fixed_mac();
+    if (err) {
+        LOG_WRN("Failed to set fixed MAC: %d", err);
     }
 
-    /* Initialize Bluetooth - now it will use our fixed MAC */
+    /* Initialize BTHome device */
+    err = bthome_init(&bthome_dev, &config);
+    if (err) {
+        LOG_ERR("Failed to initialize BTHome device: %d", err);
+        return -1;
+    }
+
+    /* Initialize Bluetooth */
     err = bt_enable(bt_ready);
     if (err) {
         LOG_ERR("Bluetooth init failed (err %d)", err);
@@ -231,14 +124,14 @@ int main(void)
     /* Wait for Bluetooth to be ready */
     k_sleep(K_SECONDS(2));
 
-    /* Start the advertising work */
-    k_work_schedule(&advertise_work, K_SECONDS(3));
+    /* Start periodic counter updates */
+    k_work_schedule(&counter_work, K_SECONDS(3));
 
     LOG_INF("BTHome Counter is running...");
     LOG_INF("Sending counter values every 5 seconds");
-    LOG_INF("Use a BTHome-compatible app (e.g., Home Assistant) to receive data");
+    LOG_INF("Use nRF Connect or Home Assistant to receive BTHome data");
 
-    /* Main loop - just keep the system running */
+    /* Main loop */
     while (1) {
         k_sleep(K_SECONDS(10));
         LOG_INF("System running, current counter: %u", counter_value);
