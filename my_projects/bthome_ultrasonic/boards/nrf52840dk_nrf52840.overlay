@@ -1,15 +1,7 @@
 /*
- * Device Tree Overlay for BTHome Ultrasonic Sensor
- * Configures GPIO pins for HC-SR04 sensor on nRF52840-DK
+ * Device Tree Overlay for BTHome Ultrasonic Sensor on nRF52840-DK
+ * Minimal overlay - GPIO configuration is done in code
  */
-
-/ {
-    aliases {
-        /* Use existing button aliases for HC-SR04 pins */
-        hcsr04-trigger = &button0;  /* P0.11 - Button 1 */
-        hcsr04-echo = &button1;     /* P0.12 - Button 2 */
-    };
-};
 
 /* Configure GPIO0 for sensor pins */
 &gpio0 {

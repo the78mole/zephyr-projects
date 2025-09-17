@@ -1,0 +1,38 @@
+/*
+ * Device Tree Overlay for BTHome Ultrasonic Sensor on ESP32 DevKitC
+ * Configures GPIO pins for HC-SR04 sensor
+ */
+
+/ {
+    aliases {
+        /* HC-SR04 sensor pin assignments for ESP32 */
+        hcsr04-trigger = &gpio18;  /* GPIO18 - Trigger pin */
+        hcsr04-echo = &gpio19;     /* GPIO19 - Echo pin */
+    };
+    
+    /* HC-SR04 sensor node for ESP32 */
+    hcsr04_sensor: hcsr04-sensor {
+        compatible = "ultrasonic-sensor";
+        status = "okay";
+        
+        /* GPIO pin specifications */
+        trigger-gpios = <&gpio0 18 GPIO_ACTIVE_HIGH>;
+        echo-gpios = <&gpio0 19 GPIO_ACTIVE_HIGH>;
+        
+        /* Sensor specifications */
+        max-distance-mm = <4000>;
+        min-distance-mm = <20>;
+        measurement-timeout-us = <30000>;
+    };
+};
+
+/* Enable GPIO controller */
+&gpio0 {
+    status = "okay";
+};
+
+/* Configure UART for debugging */
+&uart0 {
+    status = "okay";
+    current-speed = <115200>;
+};

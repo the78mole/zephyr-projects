@@ -40,6 +40,8 @@ int hcsr04_init(const struct hcsr04_config *config, struct hcsr04_data *data)
 {
     int ret;
     
+    LOG_INF("🔧 Initializing HC-SR04 ultrasonic sensor...");
+    
     /* Store configuration pointer */
     data->config = config;
     
@@ -55,26 +57,28 @@ int hcsr04_init(const struct hcsr04_config *config, struct hcsr04_data *data)
     
     /* Check if GPIO devices are ready */
     if (!gpio_is_ready_dt(&config->trigger_gpio)) {
-        LOG_ERR("Trigger GPIO device not ready");
+        LOG_ERR("❌ Trigger GPIO device not ready");
         return -ENODEV;
     }
     
     if (!gpio_is_ready_dt(&config->echo_gpio)) {
-        LOG_ERR("Echo GPIO device not ready");
+        LOG_ERR("❌ Echo GPIO device not ready");
         return -ENODEV;
     }
+    
+    LOG_DBG("📌 Configuring GPIO pins...");
     
     /* Configure trigger pin as output */
     ret = gpio_pin_configure_dt(&config->trigger_gpio, GPIO_OUTPUT_INACTIVE);
     if (ret < 0) {
-        LOG_ERR("Failed to configure trigger GPIO: %d", ret);
+        LOG_ERR("❌ Failed to configure trigger GPIO: %d", ret);
         return ret;
     }
     
     /* Configure echo pin as input with pull-down */
     ret = gpio_pin_configure_dt(&config->echo_gpio, GPIO_INPUT | GPIO_PULL_DOWN);
     if (ret < 0) {
-        LOG_ERR("Failed to configure echo GPIO: %d", ret);
+        LOG_ERR("❌ Failed to configure echo GPIO: %d", ret);
         return ret;
     }
     
@@ -84,18 +88,19 @@ int hcsr04_init(const struct hcsr04_config *config, struct hcsr04_data *data)
     /* Add callback to echo pin - trigger on both edges */
     ret = gpio_add_callback(config->echo_gpio.port, &data->echo_cb);
     if (ret < 0) {
-        LOG_ERR("Failed to add GPIO callback: %d", ret);
+        LOG_ERR("❌ Failed to add GPIO callback: %d", ret);
         return ret;
     }
     
     /* Enable interrupt on echo pin */
     ret = gpio_pin_interrupt_configure_dt(&config->echo_gpio, GPIO_INT_EDGE_BOTH);
     if (ret < 0) {
-        LOG_ERR("Failed to configure GPIO interrupt: %d", ret);
+        LOG_ERR("❌ Failed to configure GPIO interrupt: %d", ret);
         return ret;
     }
     
-    LOG_INF("HC-SR04 sensor initialized successfully");
+    LOG_INF("✅ HC-SR04 sensor initialized successfully");
+    LOG_INF("📏 Max range: %u mm, Timeout: %u us", config->max_distance_mm, config->timeout_us);
     return 0;
 }
 
@@ -108,22 +113,26 @@ int32_t hcsr04_measure_distance(const struct hcsr04_config *config, struct hcsr0
     /* Lock to ensure only one measurement at a time */
     ret = k_mutex_lock(&data->lock, K_MSEC(100));
     if (ret != 0) {
-        LOG_WRN("Failed to acquire measurement lock");
+        LOG_WRN("🔒 Failed to acquire measurement lock");
         return -EBUSY;
     }
     
     /* Reset semaphore */
     k_sem_reset(&data->measurement_sem);
     
+    LOG_DBG("📡 Sending 10µs trigger pulse...");
+    
     /* Send trigger pulse */
     gpio_pin_set_dt(&config->trigger_gpio, 1);
     k_busy_wait(TRIGGER_PULSE_US);
     gpio_pin_set_dt(&config->trigger_gpio, 0);
     
+    LOG_DBG("👂 Waiting for echo response...");
+    
     /* Wait for echo response with timeout */
     ret = k_sem_take(&data->measurement_sem, K_USEC(ECHO_TIMEOUT_US));
     if (ret != 0) {
-        LOG_WRN("Echo timeout - no object detected or out of range");
+        LOG_WRN("⏰ Echo timeout - no object detected or out of range");
         data->measurement_valid = false;
         k_mutex_unlock(&data->lock);
         return -ETIMEDOUT;
@@ -137,6 +146,8 @@ int32_t hcsr04_measure_distance(const struct hcsr04_config *config, struct hcsr0
         echo_duration_us = (UINT32_MAX - data->echo_start_time) + data->echo_end_time;
     }
     
+    LOG_DBG("⏱️  Echo duration: %u µs", echo_duration_us);
+    
     /* Convert to distance in millimeters */
     /* Distance = (echo_time_us * speed_of_sound) / 2 */
     /* Distance_cm = echo_time_us / 58 */
@@ -145,7 +156,8 @@ int32_t hcsr04_measure_distance(const struct hcsr04_config *config, struct hcsr0
     
     /* Validate measurement range */
     if (distance_mm > config->max_distance_mm || distance_mm < 20) {
-        LOG_WRN("Distance out of valid range: %u mm", distance_mm);
+        LOG_WRN("📐 Distance out of valid range: %u mm (valid: 20-%u mm)", 
+                distance_mm, config->max_distance_mm);
         data->measurement_valid = false;
         k_mutex_unlock(&data->lock);
         return -ERANGE;
@@ -157,6 +169,7 @@ int32_t hcsr04_measure_distance(const struct hcsr04_config *config, struct hcsr0
     
     k_mutex_unlock(&data->lock);
     
-    LOG_DBG("Distance measured: %u mm (echo: %u us)", distance_mm, echo_duration_us);
+    LOG_DBG("✅ Distance measured: %u mm (%.1f cm, echo: %u µs)", 
+            distance_mm, distance_mm / 10.0, echo_duration_us);
     return distance_mm;
 }

@@ -1,0 +1,18 @@
+/*
+ * Device Tree Overlay for BTHome Ultrasonic Sensor on u-blox EVK-NINA-B3
+ * Configures GPIO pins for HC-SR04 sensor using dedicated free pins
+ */
+
+/ {
+    aliases {
+        /* HC-SR04 sensor pin assignments for NINA-B3 */
+        /* Use P0.08 for trigger and P0.06 for echo - both are free GPIO pins */
+        hcsr04-trigger = &gpio0;
+        hcsr04-echo = &gpio0;
+    };
+};
+
+/* Enable GPIO controller */
+&gpio0 {
+    status = "okay";
+};

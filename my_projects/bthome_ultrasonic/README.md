@@ -1,6 +1,15 @@
-# BTHome Ultrasonic Distance Sensor
+# BTHome Ultrasonic Distance Sensor (Multi-Platform)
 
-This project implements a BTHome v2 compatible ultrasonic distance sensor using the HC-SR04 sensor and the nRF52840-DK development board with Zephyr RTOS.
+This project implements a BTHome v2 compatible ultrasonic distance sensor using the HC-SR04 sensor with Zephyr RTOS. The application supports multiple hardware platforms including Nordic nRF52840 and Espressif ESP32.
+
+## Supported Platforms
+
+| Platform | Board | Bluetooth Stack | Status | GPIO Pins |
+|----------|-------|----------------|---------|-----------|
+| **Nordic nRF52840** | nrf52840dk/nrf52840 | SoftDevice | ✅ Tested | P0.08 (Trig), P0.06 (Echo) |
+| **u-blox NINA-B3** | ubx_evkninab3_nrf52840 | SoftDevice | ✅ Ready | P0.08 (Trig), P0.06 (Echo) |
+| **Espressif ESP32** | esp32_devkitc_wroom | NimBLE | ✅ Ready | GPIO18 (Trig), GPIO19 (Echo) |
+| **ESP32-S3** | esp32s3_devkitm | NimBLE | 🟡 Compatible | GPIO18 (Trig), GPIO19 (Echo) |
 
 ## Overview
 
@@ -8,20 +17,52 @@ The application measures distance using an HC-SR04 ultrasonic sensor and broadca
 
 ## Hardware Requirements
 
+### Option 1: Nordic nRF52840-DK
+
 - nRF52840-DK development board
+- HC-SR04 ultrasonic distance sensor
+- Jumper wires for connections
+
+### Option 2: u-blox NINA-B3
+
+- u-blox EVK-NINA-B3 development board
+- HC-SR04 ultrasonic distance sensor  
+- Jumper wires for connections
+
+### Option 3: ESP32 DevKitC
+
+- ESP32 DevKitC-WROOM development board
 - HC-SR04 ultrasonic distance sensor
 - Jumper wires for connections
 
 ## Pin Connections
 
-| HC-SR04 Pin | nRF52840-DK Pin | Description |
-|-------------|-----------------|-------------|
-| VCC         | 5V or 3.3V      | Power supply |
-| GND         | GND             | Ground |
-| Trig        | P0.11 (Button1) | Trigger signal |
-| Echo        | P0.12 (Button2) | Echo signal |
+### nRF52840-DK
 
-**Note**: The current implementation uses the button pins (P0.11 and P0.12) for easy testing. For production use, consider using dedicated GPIO pins.
+| HC-SR04 Pin | nRF52840-DK Pin | Description    |
+|-------------|-----------------|----------------|
+| VCC         | 5V or 3.3V      | Power supply   |
+| GND         | GND             | Ground         |
+| Trig        | P0.08           | Trigger signal |
+| Echo        | P0.06           | Echo signal    |
+
+### u-blox NINA-B3
+
+| HC-SR04 Pin | NINA-B3 Pin | Description    |
+|-------------|-------------|----------------|
+| VCC         | 5V or 3.3V  | Power supply   |
+| GND         | GND         | Ground         |
+| Trig        | P0.08       | Trigger signal |
+| Echo        | P0.06       | Echo signal    |
+
+### ESP32 DevKitC
+
+| HC-SR04 Pin | ESP32 Pin  | Description    |
+|-------------|------------|----------------|
+| VCC         | 5V or 3.3V | Power supply   |
+| GND         | GND        | Ground         |
+| Trig        | GPIO18     | Trigger signal |
+| Echo        | GPIO19     | Echo signal    |
 
 ## Features
 
@@ -42,26 +83,76 @@ The device sends BTHome v2 advertisements with:
 
 ## Building and Flashing
 
+### Prerequisites
+
 1. **Set up Zephyr environment**:
+
    ```bash
    cd /path/to/zephyr
    source zephyr-env.sh
    ```
 
 2. **Navigate to project directory**:
+
    ```bash
    cd my_projects/bthome_ultrasonic
    ```
 
+### Build for nRF52840-DK
+
 3. **Build the application**:
+
    ```bash
-   west build -b nrf52840dk_nrf52840
+   west build -b nrf52840dk/nrf52840
    ```
 
 4. **Flash to board**:
+
    ```bash
    west flash
    ```
+
+### Build for u-blox NINA-B3
+
+3. **Build the application**:
+
+   ```bash
+   west build -b ubx_evkninab3/nrf52840
+   ```
+
+4. **Flash to board**:
+
+   ```bash
+   west flash
+   ```
+
+### Build for ESP32 DevKitC
+
+3. **Build the application**:
+
+   ```bash
+   west build -b esp32_devkitc_wroom
+   ```
+
+4. **Flash to board**:
+
+   ```bash
+   west flash
+   ```
+
+### Clean Build
+
+To switch between platforms, clean the build directory:
+
+```bash
+west build -t clean
+```
+
+Or use pristine build:
+
+```bash
+west build -b <board_name> --pristine
+```
 
 ## Configuration
 
