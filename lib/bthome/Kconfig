@@ -1,0 +1,49 @@
+# Copyright (c) 2025 BTHome v2 for Zephyr
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig BTHOME
+	bool "BTHome v2 Support"
+	depends on BT && BT_BROADCASTER
+	select BT_GAP_BROADCASTER_ROLE
+	help
+	  Enable BTHome v2 protocol support for creating Bluetooth LE
+	  sensors compatible with Home Assistant and other BTHome-supporting
+	  platforms.
+
+if BTHOME
+
+module = BTHOME
+module-str = bthome
+source "subsys/logging/Kconfig.template.log_config"
+
+config BTHOME_DEVICE_NAME_MAX_LEN
+	int "Maximum device name length"
+	default 20
+	range 1 29
+	help
+	  Maximum length for BTHome device names in advertisement packets.
+
+config BTHOME_ENCRYPTION
+	bool "Enable BTHome encryption support"
+	depends on MBEDTLS
+	default n
+	help
+	  Enable encryption support for BTHome v2. Requires mbedTLS.
+
+config BTHOME_AUTO_MAC
+	bool "Automatically set fixed MAC address"
+	default y
+	help
+	  Automatically generate and set a fixed MAC address based on
+	  hardware-specific unique identifiers (e.g., Nordic FICR.DEVICEADDR).
+	  This ensures the device appears as the same device across reboots.
+
+config BTHOME_MAX_MEASUREMENTS
+	int "Maximum measurements per advertisement"
+	default 10
+	range 1 20
+	help
+	  Maximum number of sensor measurements that can be added to a single
+	  BTHome advertisement packet.
+
+endif # BTHOME
